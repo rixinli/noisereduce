@@ -150,7 +150,13 @@ class SpectralGateStationary(SpectralGate):
             # 信号dB <= 门限 → False(0) → 认为是噪声，干掉这个格子
             sig_mask = sig_stft_db > db_thresh
 
-            # ---- 第5步：用prop_decrease调节降噪强度 ----
+            # ---- 第5步：掩码平滑（可选）----
+            # 用base.py里构造好的2D三角形核跟掩码做卷积
+            # 把掩码的硬边界（1突然变0）磨成软过渡，减少音乐噪声
+            if self.smooth_mask:
+                sig_mask = fftconvolve(sig_mask, self._smoothing_filter, mode="same")
+
+            # ---- 第6步：用prop_decrease调节降噪强度 ----
             # prop_decrease=1.0时：掩码保持 1/0（完全保留/完全删除）
             # prop_decrease=0.5时：掩码变成 1.0/0.5（保留的还是保留，"删除"的只删一半）
             # 公式：new_mask = old_mask * prop + (1 - prop)
@@ -159,12 +165,6 @@ class SpectralGateStationary(SpectralGate):
             sig_mask = sig_mask * self._prop_decrease + np.ones(np.shape(sig_mask)) * (
                     1.0 - self._prop_decrease
             )
-
-            # ---- 第6步：掩码平滑（可选）----
-            # 用base.py里构造好的2D三角形核跟掩码做卷积
-            # 把掩码的硬边界（1突然变0）磨成软过渡，减少音乐噪声
-            if self.smooth_mask:
-                sig_mask = fftconvolve(sig_mask, self._smoothing_filter, mode="same")
 
             # ---- 第7步：把掩码应用到原始频谱上 ----
             # 注意：这里乘的是原始的复数频谱sig_stft（不是dB版本）
